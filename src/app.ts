@@ -12,8 +12,14 @@ const bodyParser = require("body-parser");
 const app = express();
 
 // Configuration
-const { PORT, HOST, OPEN_AI_SECRET, ALLOWED_ORIGINS, ALLOWED_OPEN_AI_PATHS } =
-  process.env;
+const {
+  PORT,
+  HOST,
+  OPEN_AI_SECRET,
+  ALLOWED_ORIGINS,
+  ALLOWED_OPEN_AI_PATHS,
+  ALLOWED_MODELS,
+} = process.env;
 
 function extractArray(env: string): string[] {
   try {
@@ -31,8 +37,13 @@ function extractArray(env: string): string[] {
   return [];
 }
 
+function isArrayMissing(array: string[], value: string) {
+  return array.length > 0 && array.indexOf(value) === -1;
+}
+
 const allowedOrigins = extractArray(ALLOWED_ORIGINS ?? "");
 const allowedOpenAIPaths = extractArray(ALLOWED_OPEN_AI_PATHS ?? "");
+const allowedModels = extractArray(ALLOWED_MODELS ?? "");
 
 type ExtendedError = Error & { code: number };
 
@@ -54,8 +65,8 @@ const corsOptions = {
     origin: string,
     callback: (arg: null | unknown, bool: boolean) => {}
   ) => {
-    console.log("origin", origin);
-    if (allowedOrigins.indexOf(origin) === -1) {
+    // Check if CORS is valid
+    if (isArrayMissing(allowedOrigins, origin)) {
       const msg = "CORS policy for this site does not allow access.";
       const error = new Error(msg) as ExtendedError;
       error.code = 403;
@@ -73,16 +84,13 @@ app.use(globalExceptionLayer);
 // // Logging the requests
 app.use(morgan("combined"));
 
-app.get("/test", cors(corsOptions), (req: Request, res: Response) => {
-  res.json({ msg: "This is CORS-enabled for an allowed domain." });
-});
-
 const jsonParser = bodyParser.json();
 
 app.use(jsonParser);
 
 let proxyCallback: OnProxyReqCallback = (proxyReq, req, res) => {
-  if (allowedOpenAIPaths.indexOf(req.path) === -1) {
+  // Check if path is valid
+  if (isArrayMissing(allowedOpenAIPaths, req.path)) {
     const error = new Error("Api endpoint not allowed") as ExtendedError;
     error.code = 403;
     return globalExceptionLayer(error, req, res);
@@ -97,7 +105,12 @@ let proxyCallback: OnProxyReqCallback = (proxyReq, req, res) => {
   };
 
   const newBody = { ...req.body };
-  newBody.model = "gpt-3.5-turbo";
+  // Check if req.body contains a model and check if model is invalid
+  if (req?.body?.model && isArrayMissing(allowedModels, req.body.model)) {
+    const error = new Error("Invalid Model") as ExtendedError;
+    error.code = 400;
+    return globalExceptionLayer(error, req, res);
+  }
 
   if (contentType === "application/json") {
     writeBody(JSON.stringify(newBody));
@@ -111,7 +124,6 @@ app.use(
     onProxyReq: proxyCallback,
     changeOrigin: true,
     pathRewrite: (path: string, req: Request) => {
-      console.log(path);
       return path.replace("/openai", "");
     },
   })

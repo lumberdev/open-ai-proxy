@@ -14,7 +14,10 @@ HOST=<Hostname>
 OPEN_AI_SECRET=<Your open ai key>
 ALLOWED_ORIGINS='["<Allowed domain>"]' // Takes a stringified array of allowed domains
 ALLOWED_OPEN_AI_PATHS='["/v1/chat/completions", "/v1/completions"]' // Takes a stringified array of allowed open ai paths
+ALLOWED_MODELS='["gpt-3.5-turbo"]' // Models that are whitelisted for use
 ```
+
+if any of these `ALLOWED_ORIGINS`, `ALLOWED_OPEN_AI_PATHS`, `ALLOWED_MODELS` envs are empty, there will be no restrictions to what they limit.
 
 Run `yarn start` to start.
 
