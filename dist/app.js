@@ -8,6 +8,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+Object.defineProperty(exports, "__esModule", { value: true });
 const express = require("express");
 const morgan = require("morgan");
 const cors = require("cors");
@@ -17,11 +18,24 @@ const bodyParser = require("body-parser");
 // Create Express Server
 const app = express();
 // Configuration
-const PORT = 3001;
-const HOST = "localhost";
-const OPEN_AI_SECRET = process.env.OPEN_AI_SECRET;
-const allowedOrigins = ["http://localhost:3000"];
-const allowedOpenAIPaths = ["/v1/chat/completions", "/v1/completions"];
+const { PORT, HOST, OPEN_AI_SECRET, ALLOWED_ORIGINS, ALLOWED_OPEN_AI_PATHS } = process.env;
+function extractArray(env) {
+    try {
+        if (typeof env === "string") {
+            const parsed = JSON.parse(env);
+            if (Array.isArray(parsed)) {
+                return parsed;
+            }
+            return [];
+        }
+    }
+    catch (e) {
+        return [];
+    }
+    return [];
+}
+const allowedOrigins = extractArray(ALLOWED_ORIGINS !== null && ALLOWED_ORIGINS !== void 0 ? ALLOWED_ORIGINS : "");
+const allowedOpenAIPaths = extractArray(ALLOWED_OPEN_AI_PATHS !== null && ALLOWED_OPEN_AI_PATHS !== void 0 ? ALLOWED_OPEN_AI_PATHS : "");
 function globalExceptionLayer(error, req, res, next) {
     var _a;
     return __awaiter(this, void 0, void 0, function* () {
@@ -52,26 +66,27 @@ app.get("/test", cors(corsOptions), (req, res) => {
 });
 const jsonParser = bodyParser.json();
 app.use(jsonParser);
+let proxyCallback = (proxyReq, req, res) => {
+    if (allowedOpenAIPaths.indexOf(req.path) === -1) {
+        const error = new Error("Api endpoint not allowed");
+        error.code = 403;
+        return globalExceptionLayer(error, req, res);
+    }
+    proxyReq.setHeader("Authorization", `Bearer ${OPEN_AI_SECRET}`);
+    const contentType = proxyReq.getHeader("Content-Type");
+    const writeBody = (bodyData) => {
+        proxyReq.setHeader("Content-Length", Buffer.byteLength(bodyData));
+        proxyReq.write(bodyData);
+    };
+    const newBody = Object.assign({}, req.body);
+    newBody.model = "gpt-3.5-turbo";
+    if (contentType === "application/json") {
+        writeBody(JSON.stringify(newBody));
+    }
+};
 app.use("/openai*", createProxyMiddleware({
     target: "https://api.openai.com/",
-    onProxyReq: (proxyReq, req, res) => {
-        if (allowedOpenAIPaths.indexOf(req.path) === -1) {
-            const error = new Error("Api endpoint not allowed");
-            error.code = 403;
-            return globalExceptionLayer(error, req, res);
-        }
-        proxyReq.setHeader("Authorization", `Bearer ${OPEN_AI_SECRET}`);
-        const contentType = proxyReq.getHeader("Content-Type");
-        const writeBody = (bodyData) => {
-            proxyReq.setHeader("Content-Length", Buffer.byteLength(bodyData));
-            proxyReq.write(bodyData);
-        };
-        const newBody = Object.assign({}, req.body);
-        newBody.model = "gpt-3.5-turbo";
-        if (contentType === "application/json") {
-            writeBody(JSON.stringify(newBody));
-        }
-    },
+    onProxyReq: proxyCallback,
     changeOrigin: true,
     pathRewrite: (path, req) => {
         console.log(path);
