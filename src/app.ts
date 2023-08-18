@@ -38,7 +38,13 @@ function extractArray(env: string): string[] {
 }
 
 function isArrayMissing(array: string[], value: string) {
-  return array.length > 0 && array.indexOf(value) === -1;
+  const missingValue =
+    array.length > 0 &&
+    array.findIndex((item) => {
+      const re = new RegExp(item);
+      return re.test(value);
+    }) === -1;
+  return missingValue;
 }
 
 const allowedOrigins = extractArray(ALLOWED_ORIGINS ?? "");
