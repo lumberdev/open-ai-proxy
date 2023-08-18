@@ -90,6 +90,7 @@ app.use(jsonParser);
 
 let proxyCallback: OnProxyReqCallback = (proxyReq, req, res) => {
   // Check if path is valid
+  console.log(req.path, allowedOpenAIPaths);
   if (isArrayMissing(allowedOpenAIPaths, req.path)) {
     const error = new Error("Api endpoint not allowed") as ExtendedError;
     error.code = 403;
